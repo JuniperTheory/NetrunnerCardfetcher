@@ -36,9 +36,45 @@ async def startup():
 			await t
 
 def get_cards(card_names):
+	async def download_card_image(session, c):
+		url = c.image_uris(0, 'normal')
+		async with session.get(url) as r:
+			return io.BytesIO(r.read())
+
+
+	def get_text_representation(c):
+		# I genuinely think this is the best way to check whether a card has
+		# power/toughness, considering how Scrython is implemented.
+		# Can't even check for Creature type because of stuff like Vehicles.
+		try:
+			c.power()
+			has_pt = True
+		except KeyError:
+			has_pt = False
+
+		ret = c.name() # All cards have a name.
+
+		# Some cards (lands, [[Wheel of Fate]], whatever) don't have mana costs.
+		# Add it if it's there.
+		if c.mana_cost():
+			ret += f' - {c.mana_cost()}'
+
+		# All cards have a type line.
+		ret += '\n' + c.type_line()
+
+		# Funnily enough, not all cards have oracle text.
+		# It feels like they should, but that's ignoring vanilla creatures.
+		if c.oracle_text():
+			ret += f'\n\n{c.oracle_text()}'
+
+		# Finally, power/toughness.
+		if has_pt:
+			ret += f'\n\n{c.power()}/{c.toughness()}'
+
+		return ret
+
 	cards = []
 	found = []
-	images = []
 
 	for name in card_names:
 		try:
@@ -48,26 +84,15 @@ def get_cards(card_names):
 		except scrython.foundation.ScryfallError:
 			cards.append(f'No card named "{name}" was found.')
 
-		if 1 <= len(found) <= 4:
-			r = requests.get(c.image_uris(0, 'normal'), stream=True)
+	if 1 <= len(found) <= 4:
+		# download card images
+		async with aiohttp.ClientSession() as session:
+			images = list(await asyncio.gather(
+					*(download_card_image(session, c) for c in found)
+			))
 
-			has_pt = False
-			try:
-				c.power()
-				has_pt = True
-			except KeyError:
-				pass
-
-			description = c.name()
-			if c.mana_cost():
-				description += f' - {c.mana_cost()}'
-			description += '\n' + c.type_line()
-			if c.oracle_text():
-				description += f'\n\n{c.oracle_text()}'
-			if has_pt:
-				description += f'\n\n{c.power()}/{c.toughness()}'
-
-			images.append((io.BytesIO(r.content), description))
+	else:
+		images = None
 
 	return cards, images
 
