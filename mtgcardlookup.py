@@ -7,6 +7,8 @@ import re
 import json
 import requests
 import io
+import sys
+import traceback
 
 import atoot
 import scrython
@@ -35,12 +37,15 @@ async def startup():
 		for t in tasks:
 			await t
 
-def get_cards(card_names):
+async def get_cards(card_names):
 	async def download_card_image(session, c):
+		log(f'Downloading image for {c.name()}...')
 		url = c.image_uris(0, 'normal')
 		async with session.get(url) as r:
-			return io.BytesIO(r.read())
-
+			image = io.BytesIO(await r.read())
+		
+		log(f'Done downloading image for {c.name()}!')
+		return image
 
 	def get_text_representation(c):
 		# I genuinely think this is the best way to check whether a card has
@@ -87,9 +92,9 @@ def get_cards(card_names):
 	if 1 <= len(found) <= 4:
 		# download card images
 		async with aiohttp.ClientSession() as session:
-			images = list(await asyncio.gather(
+			images = list(zip(await asyncio.gather(
 					*(download_card_image(session, c) for c in found)
-			))
+			), (get_text_representation(c) for c in found)))
 
 	else:
 		images = None
@@ -128,7 +133,6 @@ async def listen(c, me):
 	async with c.streaming('user') as stream:
 		async for msg in stream:
 			status = json.loads(msg.json()['payload'])
-
 			try:
 				# two events come in for the statuses, one of them has the status nested deeper
 				# just ignore that one
@@ -139,7 +143,15 @@ async def listen(c, me):
 				status_text = status['content']
 				status_visibility = status['visibility']
 			except:
-				# ignore any events we don't know how to handle
+				try:
+					if status['type'] == 'follow':
+						id = status['account']['id']
+						log(f'Received follow from {id}, following back')
+						await c.account_follow(id)
+				except:
+					log('Event came in that we don\'t know how to handle.', Severity.WARNING)
+					log(status, Severity.WARNING)
+				
 				continue
 
 			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
@@ -152,7 +164,7 @@ async def listen(c, me):
 				# ignore any statuses without cards in them
 				if not card_names: continue
 
-				cards, media = get_cards(card_names)
+				cards, media = await get_cards(card_names)
 
 				reply_text = status_author
 
@@ -165,7 +177,8 @@ async def listen(c, me):
 					media_ids = []
 					for image, desc in media:
 						media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
-			except:
+			except Exception as e:
+				log(traceback.print_exc(), Severity.ERROR)
 				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
 
 			log('Sending reply...')
