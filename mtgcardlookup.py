@@ -1,6 +1,8 @@
 import os
 import shutil
 import asyncio
+import re
+import json
 
 import atoot
 
@@ -57,7 +59,31 @@ async def listen(c, me):
 	log('Listening...')
 	async with c.streaming('user') as stream:
 		async for msg in stream:
-			print(msg.json())
+			status = json.loads(msg.json()['payload'])
+			
+			try:
+				# two events come in for the statuses, one of them has the status nested deeper
+				# just ignore that one
+				if 'status' in status: continue
+			except:
+				# ignore any events we don't know how to handle
+				continue
+			
+			status_id = status['id']
+			status_author = '@' + status['account']['acct']
+			status_text = status['content']
+			status_visibility = status['visibility']
+			
+			cards = re.findall(r'\[\[(.+?)\]\]', status_text)
+			
+			# ignore any statuses without cards in them
+			if not cards: continue
+			
+			reply_text = status_author + ' ' + ', '.join(cards)
+			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
+			
+			log('Sending reply...')
+			await c.create_status(status=reply_text, in_reply_to_id=status_id, visibility=reply_visibility)
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
