@@ -3,8 +3,13 @@ import shutil
 import asyncio
 import re
 import json
+import requests
+import io
 
 import atoot
+import scrython
+import nest_asyncio
+nest_asyncio.apply()
 
 from debug import *
 
@@ -27,6 +32,42 @@ async def startup():
 		
 		for t in tasks:
 			await t
+
+def get_cards(card_names):
+	cards = []
+	found = []
+	images = []
+	
+	for name in card_names:
+		try:
+			c = scrython.cards.Named(fuzzy=name)
+			found.append(c)
+			cards.append(f'{c.name()} - {c.scryfall_uri()}')
+		except scrython.foundation.ScryfallError:
+			cards.append(f'No card found "{name}" was found.')
+			
+		if 1 <= len(found) <= 4:
+			r = requests.get(c.image_uris(0, 'normal'), stream=True)
+			
+			has_pt = False
+			try:
+				c.power()
+				has_pt = True
+			except KeyError:
+				pass
+			
+			description = c.name()
+			if c.mana_cost():
+				description += f' - {c.mana_cost()}'
+			description += '\n' + c.type_line()
+			if c.oracle_text():
+				description += f'\n\n{c.oracle_text()}'
+			if has_pt:
+				description += f'\n\n{c.power()}/{c.toughness()}'
+			
+			images.append((io.BytesIO(r.content), description))
+	
+	return cards, images
 
 async def update_followers(c, me):
 	log('Updating followed accounts...')
@@ -74,16 +115,34 @@ async def listen(c, me):
 			status_text = status['content']
 			status_visibility = status['visibility']
 			
-			cards = re.findall(r'\[\[(.+?)\]\]', status_text)
-			
-			# ignore any statuses without cards in them
-			if not cards: continue
-			
-			reply_text = status_author + ' ' + ', '.join(cards)
 			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
 			
+			media_ids = None
+			
+			try:
+				card_names = re.findall(r'\[\[(.+?)\]\]', status_text)
+			
+				# ignore any statuses without cards in them
+				if not card_names: continue
+			
+				cards, media = get_cards(card_names)
+			
+				reply_text = status_author
+			
+				if len(cards) == 1:
+					reply_text += ' ' + cards[0]
+				else:
+					reply_text += '\n\n' + '\n'.join(cards)
+			
+				if media:
+					media_ids = []
+					for image, desc in media:
+						media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
+			except:
+				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
+			
 			log('Sending reply...')
-			await c.create_status(status=reply_text, in_reply_to_id=status_id, visibility=reply_visibility)
+			await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
