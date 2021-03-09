@@ -130,7 +130,7 @@ async def get_cards(card_names):
 	else:
 		images = None
 
-	return cards, images
+	return responses, images
 
 async def update_followers(c, me):
 	log('Updating followed accounts...')
