@@ -44,7 +44,7 @@ def get_cards(card_names):
 			found.append(c)
 			cards.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
-			cards.append(f'No card found "{name}" was found.')
+			cards.append(f'No card named "{name}" was found.')
 			
 		if 1 <= len(found) <= 4:
 			r = requests.get(c.image_uris(0, 'normal'), stream=True)
