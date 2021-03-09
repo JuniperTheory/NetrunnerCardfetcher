@@ -225,8 +225,8 @@ async def listen(c, me):
 				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
 
 			log('Sending reply...')
-			await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
-			log('Reply sent!')
+			reply = await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
+			log(f'Reply sent! {reply["uri"]}')
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
