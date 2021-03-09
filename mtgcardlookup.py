@@ -108,14 +108,14 @@ async def listen(c, me):
 				# two events come in for the statuses, one of them has the status nested deeper
 				# just ignore that one
 				if 'status' in status: continue
+			
+				status_id = status['id']
+				status_author = '@' + status['account']['acct']
+				status_text = status['content']
+				status_visibility = status['visibility']
 			except:
 				# ignore any events we don't know how to handle
 				continue
-			
-			status_id = status['id']
-			status_author = '@' + status['account']['acct']
-			status_text = status['content']
-			status_visibility = status['visibility']
 			
 			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
 			
