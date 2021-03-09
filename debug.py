@@ -1,6 +1,5 @@
 from enum import Enum
 from datetime import datetime
-import aiohttp
 
 DEBUG = True
 

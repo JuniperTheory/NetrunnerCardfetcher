@@ -3,6 +3,7 @@
 import os # Used exactly once to check for the config file
 import shutil # Used exactly once to copy the sample config file
 import asyncio
+import aiohttp
 import re
 import json
 import requests
