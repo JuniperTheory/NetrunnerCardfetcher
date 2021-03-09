@@ -15,6 +15,8 @@ import scrython
 import nest_asyncio
 nest_asyncio.apply()
 
+import face
+
 from debug import *
 
 async def startup():
@@ -43,11 +45,22 @@ async def get_cards(card_names):
 		url = c.image_uris(0, 'normal')
 		async with session.get(url) as r:
 			image = io.BytesIO(await r.read())
-		
+
 		log(f'Done downloading image for {c.name()}!')
 		return image
 
 	def get_text_representation(c):
+		try:
+			# Double face cards have to be treated ENTIRELY DIFFERENTLY
+			# Instead of card objects we just get a list of two dictionaries.
+			# I've decided to try to reuse at much code as possible by jerryrigging
+			# my own Face object that can be passed into my card parsing logic
+			return '\n\n//\n\n'.join((
+				get_text_representation(face.Face(card_face)) for card_face in c.card_faces()
+			))
+		except:
+			pass
+
 		# I genuinely think this is the best way to check whether a card has
 		# power/toughness, considering how Scrython is implemented.
 		# Can't even check for Creature type because of stuff like Vehicles.
@@ -151,7 +164,7 @@ async def listen(c, me):
 				except:
 					log('Event came in that we don\'t know how to handle.', Severity.WARNING)
 					log(status, Severity.WARNING)
-				
+
 				continue
 
 			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
