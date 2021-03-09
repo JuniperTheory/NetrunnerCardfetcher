@@ -2,6 +2,12 @@
 # Instead of card objects we just get a list of two dictionaries.
 # I've decided to try to reuse at much code as possible by jerryrigging
 # my own Face object that can be passed into my card parsing logic
+
+# The only reason this class is here is as a "fake" Card class. It
+# implements just enough of the Card interface for python's duck typing
+# to let it through for my purposes.
+
+# I wouldn't have to do any of this if Scrython wasn't so needlessly bizarre.
 class Face:
 	def __init__(self, d):
 		self.d = d

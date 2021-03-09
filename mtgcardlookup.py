@@ -1,19 +1,22 @@
 #!/usr/bin/env python3.9
 
-import os
-import shutil
+import os # Used exactly once to check for the config file
+import shutil # Used exactly once to copy the sample config file
 import asyncio
 import re
 import json
 import requests
 import io
-import sys
 import traceback
 
-import atoot
-import scrython
-import nest_asyncio
-nest_asyncio.apply()
+import atoot # Asynchronous Mastodon API wrapper
+import scrython # Scryfall API (similar to Gatherer but I prefer Scryfall)
+
+import nest_asyncio  # I cannot even begin to explain why I need this one.
+nest_asyncio.apply() # It has something to do with Scrython using asyncio, which means I can't
+                     # use it from within my asyncio code. And that's on purpose, I think.
+                     # But this patches asyncio to allow that, somehow?
+                     # I'm sorry, it's completely beyond me. Look it up.
 
 import face
 
@@ -44,6 +47,9 @@ async def get_cards(card_names):
 		log(f'Downloading image for {c.name()}...')
 		url = c.image_uris(0, 'normal')
 		async with session.get(url) as r:
+			# BytesIO stores the data in memory as a file-like object.
+			# We can turn around and upload it to fedi without ever
+			# touching the disk.
 			image = io.BytesIO(await r.read())
 
 		log(f'Done downloading image for {c.name()}!')
@@ -91,24 +97,36 @@ async def get_cards(card_names):
 
 		return ret
 
+	# Responses list: One entry for each [[card name]] in parent, even if the
+	# response is just "No card named 'CARDNAME' was found."
+	responses = []
+	# Cards list: Only cards that were found successfully
 	cards = []
-	found = []
 
 	for name in card_names:
 		try:
 			c = scrython.cards.Named(fuzzy=name)
-			found.append(c)
-			cards.append(f'{c.name()} - {c.scryfall_uri()}')
+			cards.append(c)
+			responses.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
-			cards.append(f'No card named "{name}" was found.')
+			responses.append(f'No card named "{name}" was found.')
 
-	if 1 <= len(found) <= 4:
-		# download card images
+	# Download card images.
+	# A status can only have four images on it, so we can't necessarily include
+	# every card mentioned in the status.
+	# The reason I choose to include /no/ images in that case is that someone
+	# linking to more than 4 cards is probably talking about enough different things
+	# that it would be weird for the first four they happened to mention to have images.
+	# Like if someone's posting a decklist it would be weird for the first four cards to
+	# be treated as special like that.
+	if 1 <= len(cards) <= 4:
 		async with aiohttp.ClientSession() as session:
-			images = list(zip(await asyncio.gather(
-					*(download_card_image(session, c) for c in found)
-			), (get_text_representation(c) for c in found)))
-
+			images = tuple(zip(
+				await asyncio.gather(
+					*(download_card_image(session, c) for c in cards)
+				),
+				(get_text_representation(c) for c in cards)
+			))
 	else:
 		images = None
 
@@ -119,13 +137,16 @@ async def update_followers(c, me):
 	accounts_following_me = set(map(lambda a: a['id'], await c.account_followers(me)))
 	accounts_i_follow = set(map(lambda a: a['id'], await c.account_following(me)))
 
-	# accounts that follow me that i don't follow
+	# Accounts that follow me that I don't follow
 	to_follow = accounts_following_me - accounts_i_follow
 
-	# accounts i follow that don't follow me
+	# Accounts I follow that don't follow me
 	to_unfollow = accounts_i_follow - accounts_following_me
 
 	if to_follow:
+		# Note that the bot listens for follows and tries to follow 
+		# back instantly. This is /usually/ dead code but it's a failsafe
+		# in case someone followed while the bot was down or something.
 		log(f'{len(to_follow)} accounts to follow:')
 		for account in to_follow:
 			await c.account_follow(account)
@@ -147,8 +168,8 @@ async def listen(c, me):
 		async for msg in stream:
 			status = json.loads(msg.json()['payload'])
 			try:
-				# two events come in for the statuses, one of them has the status nested deeper
-				# just ignore that one
+				# Two events come in for each status on the timeline. I don't know why.
+				# One of them has the status nested deeper. Just ignore that one I guess.
 				if 'status' in status: continue
 
 				status_id = status['id']
@@ -167,6 +188,11 @@ async def listen(c, me):
 
 				continue
 
+			# Reply unlisted or at the same visibility as the parent, whichever is
+			# more restrictive
+			# I realized after writing this that I don't /think/ it ever matters?
+			# I think replies behave the same on public and unlisted. But I'm not 100%
+			# sure so it stays.
 			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
 
 			media_ids = None
@@ -181,6 +207,9 @@ async def listen(c, me):
 
 				reply_text = status_author
 
+				# Just a personal preference thing. If I ask for one card, put the
+				# text on the same line as the mention. If I ask for more, start the
+				# list a couple of lines down.
 				if len(cards) == 1:
 					reply_text += ' ' + cards[0]
 				else:
@@ -191,26 +220,28 @@ async def listen(c, me):
 					for image, desc in media:
 						media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
 			except Exception as e:
+				# Oops!
 				log(traceback.print_exc(), Severity.ERROR)
 				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
 
 			log('Sending reply...')
 			await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
+			log('Reply sent!')
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
-    """Run func every interval seconds.
+	"""Run func every interval seconds.
 
-    If func has not finished before *interval*, will run again
-    immediately when the previous iteration finished.
+	If func has not finished before *interval*, will run again
+	immediately when the previous iteration finished.
 
-    *args and **kwargs are passed as the arguments to func.
-    """
-    while True:
-        await asyncio.gather(
-            func(*args, **kwargs),
-            asyncio.sleep(interval),
-        )
+	*args and **kwargs are passed as the arguments to func.
+	"""
+	while True:
+		await asyncio.gather(
+			func(*args, **kwargs),
+			asyncio.sleep(interval),
+		)
 
 if __name__ == '__main__':
 	asyncio.run(startup())
