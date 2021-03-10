@@ -220,9 +220,13 @@ async def listen(c, me):
 					reply_text += '\n\n' + '\n'.join(cards)
 
 				if media:
-					media_ids = []
-					for image, desc in media:
-						media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
+					try:
+						media_ids = []
+						for image, desc in media:
+							media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
+					except atoot.api.RatelimitError:
+						media_ids = None
+						reply_text += '\n\nMedia attachments are temporarily disabled due to API restrictions, they will return shortly.'
 			except Exception as e:
 				# Oops!
 				log(traceback.print_exc(), Severity.ERROR)
