@@ -106,7 +106,10 @@ async def get_cards(card_names):
 
 	for name in card_names:
 		try:
-			c = scrython.cards.Named(fuzzy=name[:499])
+			if len(name) > 141:
+				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Make This Card to Have The Absolute Longest Card Name Ever Elemental')
+			else:
+				c = scrython.cards.Named(fuzzy=name)
 			cards.append(c)
 			responses.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
