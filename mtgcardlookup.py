@@ -106,7 +106,7 @@ async def get_cards(card_names):
 
 	for name in card_names:
 		try:
-			c = scrython.cards.Named(fuzzy=name)
+			c = scrython.cards.Named(fuzzy=name[:499])
 			cards.append(c)
 			responses.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
@@ -145,7 +145,7 @@ async def update_followers(c, me):
 	to_unfollow = accounts_i_follow - accounts_following_me
 
 	if to_follow:
-		# Note that the bot listens for follows and tries to follow 
+		# Note that the bot listens for follows and tries to follow
 		# back instantly. This is /usually/ dead code but it's a failsafe
 		# in case someone followed while the bot was down or something.
 		log(f'{len(to_follow)} accounts to follow:')
