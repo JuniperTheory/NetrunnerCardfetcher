@@ -173,6 +173,9 @@ async def listen(c, me):
 				# One of them has the status nested deeper. Just ignore that one I guess.
 				if 'status' in status: continue
 
+				# Don't activate on boosts at all
+				if 'reblog' in status: continue
+
 				status_id = status['id']
 				status_author = '@' + status['account']['acct']
 				status_text = status['content']
