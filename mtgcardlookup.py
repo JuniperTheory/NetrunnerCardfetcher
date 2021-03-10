@@ -174,7 +174,7 @@ async def listen(c, me):
 				if 'status' in status: continue
 
 				# Don't activate on boosts at all
-				if 'reblog' in status: continue
+				if 'reblog' in status and status['reblog'] is not None: continue
 
 				status_id = status['id']
 				status_author = '@' + status['account']['acct']
