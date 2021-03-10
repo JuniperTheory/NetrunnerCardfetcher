@@ -109,6 +109,8 @@ async def get_cards(card_names):
 		try:
 			if len(name) > 141:
 				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Make This Card to Have The Absolute Longest Card Name Ever Elemental')
+			elif len(name) == 0:
+				c = scrython.cards.Named(fuzzy='_____')
 			else:
 				c = scrython.cards.Named(fuzzy=name)
 			cards.append(c)
@@ -206,7 +208,7 @@ async def listen(c, me):
 			media_ids = None
 
 			try:
-				card_names = re.findall(r'\[\[(.+?)\]\]', status_text)
+				card_names = re.findall(r'\[\[(.*?)\]\]', status_text)
 
 				# ignore any statuses without cards in them
 				if not card_names: continue
