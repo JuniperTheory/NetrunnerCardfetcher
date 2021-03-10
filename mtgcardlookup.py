@@ -139,8 +139,8 @@ async def get_cards(card_names):
 
 async def update_followers(c, me):
 	log('Updating followed accounts...')
-	accounts_following_me = set(map(lambda a: a['id'], await c.account_followers(me)))
-	accounts_i_follow = set(map(lambda a: a['id'], await c.account_following(me)))
+	accounts_following_me = set(map(lambda a: a['id'], await c.get_all(c.account_followers(me))))
+	accounts_i_follow = set(map(lambda a: a['id'], await c.get_all(c.account_following(me))))
 
 	# Accounts that follow me that I don't follow
 	to_follow = accounts_following_me - accounts_i_follow
