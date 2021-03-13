@@ -239,8 +239,14 @@ async def listen(c, me):
 				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
 
 			log('Sending reply...')
-			reply = await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
-			log(f'Reply sent! {reply["uri"]}')
+			try:
+				reply = await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
+				log(f'Reply sent! {reply["uri"]}')
+			except atoot.api.UnprocessedError as e:
+				log(f'Could not send reply!', Severity.ERROR)
+				log(traceback.format_exc(), Severity.ERROR)
+				error_msg = 'An error occured sending the reply. This most likely means that it would have been greater than 500 characters. If it was something else, please let Holly know!'
+				await c.create_status(status=f'{status_author} {error_msg}', in_reply_to_id=status_id, visibility=reply_visibility)
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
