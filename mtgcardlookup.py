@@ -108,7 +108,7 @@ async def get_cards(card_names):
 		name = re.sub(r'<.*?>', '', name).strip()
 		try:
 			if len(name) > 141:
-				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Make This Card to Have The Absolute Longest Card Name Ever Elemental')
+				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Made this Card to Have the Absolute Longest Card Name Ever Elemental')
 			elif len(name) == 0:
 				c = scrython.cards.Named(fuzzy='_____')
 			else:
