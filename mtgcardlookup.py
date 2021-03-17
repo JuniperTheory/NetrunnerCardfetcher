@@ -169,6 +169,14 @@ async def update_followers(c, me):
 	else:
 		log('No accounts to unfollow.')
 
+async def upload_image(c, image, desc):
+	card_name = desc.split('\n')[0].split(' - ')[0]
+	log(f'Uploading {card_name}...')
+	id = (await c.upload_attachment(fileobj=image, description=desc))['id']
+	log(f'Done uploading {card_name}!')
+	return id
+
+
 async def listen(c, me):
 	log('Listening...')
 	async with c.streaming('user') as stream:
@@ -227,9 +235,9 @@ async def listen(c, me):
 
 				if media:
 					try:
-						media_ids = []
-						for image, desc in media:
-							media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
+						media_ids = await asyncio.gather(
+							*(upload_image(c, image, desc) for image, desc in media)
+						)
 					except atoot.api.RatelimitError:
 						media_ids = None
 						reply_text += '\n\nMedia attachments are temporarily disabled due to API restrictions, they will return shortly.'
