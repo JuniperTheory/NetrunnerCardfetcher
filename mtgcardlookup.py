@@ -106,13 +106,13 @@ async def get_cards(card_names):
 
 	for name in card_names:
 		name = re.sub(r'<.*?>', '', name).strip()
-		
+
 		# Handle set codes
 		if '|' in name:
 			name, set_code, *_ = name.split('|')
 		else:
 			set_code = ''
-		
+
 		try:
 			if len(name) > 141:
 				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Made this Card to Have the Absolute Longest Card Name Ever Elemental')
@@ -179,84 +179,90 @@ async def update_followers(c, me):
 	else:
 		log('No accounts to unfollow.')
 
+async def handle_status(c, status):
+	# Ignore all reblogs
+	if status.get('reblog'): return
+
+	status_id = status['id']
+	status_author = '@' + status['account']['acct']
+	status_text = status['content']
+	status_visibility = status['visibility']
+	
+	# Reply unlisted or at the same visibility as the parent, whichever is
+	# more restrictive
+	# I realized after writing this that I don't /think/ it ever matters?
+	# I think replies behave the same on public and unlisted. But I'm not 100%
+	# sure so it stays.
+	reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
+
+	media_ids = None
+
+	try:
+		card_names = re.findall(r'\[\[(.*?)\]\]', status_text)
+
+		# ignore any statuses without cards in them
+		if not card_names: return
+
+		cards, media = await get_cards(card_names)
+
+		reply_text = status_author
+
+		# Just a personal preference thing. If I ask for one card, put the
+		# text on the same line as the mention. If I ask for more, start the
+		# list a couple of lines down.
+		if len(cards) == 1:
+			reply_text += ' ' + cards[0]
+		else:
+			reply_text += '\n\n' + '\n'.join(cards)
+
+		if media:
+			try:
+				media_ids = []
+				for image, desc in media:
+					media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
+			except atoot.api.RatelimitError:
+				media_ids = None
+				reply_text += '\n\nMedia attachments are temporarily disabled due to API restrictions, they will return shortly.'
+	except Exception as e:
+		# Oops!
+		log(traceback.print_exc(), Severity.ERROR)
+		reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
+
+	log('Sending reply...')
+	try:
+		reply = await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
+		log(f'Reply sent! {reply["uri"]}')
+	except atoot.api.UnprocessedError as e:
+		log(f'Could not send reply!', Severity.ERROR)
+		log(traceback.format_exc(), Severity.ERROR)
+		error_msg = 'An error occured sending the reply. This most likely means that it would have been greater than 500 characters. If it was something else, please let Holly know!'
+		await c.create_status(status=f'{status_author} {error_msg}', in_reply_to_id=status_id, visibility=reply_visibility)
+
+async def handle_follow(c, follow):
+	id = follow['account']['id']
+	log(f'Received follow from {id}, following back')
+	await c.account_follow(id)
+
 async def listen(c, me):
 	log('Listening...')
 	async with c.streaming('user') as stream:
 		async for msg in stream:
-			status = json.loads(msg.json()['payload'])
-			try:
-				# Two events come in for each status on the timeline. I don't know why.
-				# One of them has the status nested deeper. Just ignore that one I guess.
-				if 'status' in status: continue
+			event = msg.json()['event']
+			payload = json.loads(msg.json()['payload'])
 
-				# Don't activate on boosts at all
-				if 'reblog' in status and status['reblog'] is not None: continue
+			# We only care about these two events
+			if event == 'update':
+				mentions_me = any((mentioned['id'] == me['id'] for mentioned in payload['mentions']))
 
-				status_id = status['id']
-				status_author = '@' + status['account']['acct']
-				status_text = status['content']
-				status_visibility = status['visibility']
-			except:
-				try:
-					if status['type'] == 'follow':
-						id = status['account']['id']
-						log(f'Received follow from {id}, following back')
-						await c.account_follow(id)
-				except:
-					log('Event came in that we don\'t know how to handle.', Severity.WARNING)
-					log(status, Severity.WARNING)
-
-				continue
-
-			# Reply unlisted or at the same visibility as the parent, whichever is
-			# more restrictive
-			# I realized after writing this that I don't /think/ it ever matters?
-			# I think replies behave the same on public and unlisted. But I'm not 100%
-			# sure so it stays.
-			reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
-
-			media_ids = None
-
-			try:
-				card_names = re.findall(r'\[\[(.*?)\]\]', status_text)
-
-				# ignore any statuses without cards in them
-				if not card_names: continue
-
-				cards, media = await get_cards(card_names)
-
-				reply_text = status_author
-
-				# Just a personal preference thing. If I ask for one card, put the
-				# text on the same line as the mention. If I ask for more, start the
-				# list a couple of lines down.
-				if len(cards) == 1:
-					reply_text += ' ' + cards[0]
-				else:
-					reply_text += '\n\n' + '\n'.join(cards)
-
-				if media:
-					try:
-						media_ids = []
-						for image, desc in media:
-							media_ids.append((await c.upload_attachment(fileobj=image, params={}, description=desc))['id'])
-					except atoot.api.RatelimitError:
-						media_ids = None
-						reply_text += '\n\nMedia attachments are temporarily disabled due to API restrictions, they will return shortly.'
-			except Exception as e:
-				# Oops!
-				log(traceback.print_exc(), Severity.ERROR)
-				reply_text = f'{status_author} Sorry! You broke me somehow. Please let Holly know what you did!'
-
-			log('Sending reply...')
-			try:
-				reply = await c.create_status(status=reply_text, media_ids=media_ids, in_reply_to_id=status_id, visibility=reply_visibility)
-				log(f'Reply sent! {reply["uri"]}')
-			except atoot.api.UnprocessedError as e:
-				log(f'Could not send reply!', Severity.ERROR)
-				log(traceback.format_exc(), Severity.ERROR)
-				error_msg = 'An error occured sending the reply. This most likely means that it would have been greater than 500 characters. If it was something else, please let Holly know!'
-				await c.create_status(status=f'{status_author} {error_msg}', in_reply_to_id=status_id, visibility=reply_visibility)
+				# Ignore any incoming status that mentions us
+				# We're also going to get a ntification event, we'll handle it there
+				if not mentions_me:
+					await handle_status(c, payload)
+			elif event == 'notification':
+				if payload['type'] == 'follow':
+					await handle_follow(c, payload)
+				elif payload['type'] == 'mention':
+					await handle_status(c, payload['status'])
 
 # https://stackoverflow.com/a/55505152/2114129
 async def repeat(interval, func, *args, **kwargs):
