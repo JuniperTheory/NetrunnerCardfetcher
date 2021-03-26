@@ -106,17 +106,27 @@ async def get_cards(card_names):
 
 	for name in card_names:
 		name = re.sub(r'<.*?>', '', name).strip()
+		
+		# Handle set codes
+		if '|' in name:
+			name, set_code, *_ = name.split('|')
+		else:
+			set_code = ''
+		
 		try:
 			if len(name) > 141:
 				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Made this Card to Have the Absolute Longest Card Name Ever Elemental')
 			elif len(name) == 0:
 				c = scrython.cards.Named(fuzzy='_____')
 			else:
-				c = scrython.cards.Named(fuzzy=name)
+				c = scrython.cards.Named(fuzzy=name, set=set_code)
 			cards.append(c)
 			responses.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
-			responses.append(f'No card named "{name}" was found.')
+			if set_code:
+				responses.append(f'No card named "{name}" from set with code {set_code.upper()} was found.')
+			else:
+				responses.append(f'No card named "{name}" was found.')
 
 	# Download card images.
 	# A status can only have four images on it, so we can't necessarily include
