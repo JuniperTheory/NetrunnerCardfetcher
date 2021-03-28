@@ -29,3 +29,6 @@ class Face:
 
 	def toughness(self):
 		return self.d['toughness']
+
+	def image_uris(self, _, layout):
+		return self.d['image_uris'][layout]

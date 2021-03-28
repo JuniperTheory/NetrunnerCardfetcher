@@ -9,6 +9,7 @@ import json
 import requests
 import io
 import traceback
+from PIL import Image
 
 import atoot # Asynchronous Mastodon API wrapper
 import scrython # Scryfall API (similar to Gatherer but I prefer Scryfall)
@@ -44,14 +45,36 @@ async def startup():
 			await t
 
 async def get_cards(card_names):
-	async def download_card_image(session, c):
+	async def get_card_image(session, c):
+		async def download_card_image(session, url):
+			async with session.get(url) as r:
+				# BytesIO stores the data in memory as a file-like object.
+				# We can turn around and upload it to fedi without ever
+				# touching the disk.
+				return io.BytesIO(await r.read())
+
+		try:
+			front, back = map(Image.open, await asyncio.gather(
+				*(get_card_image(session, face.Face(card_face)) for card_face in c.card_faces())
+			))
+			
+			new_image = Image.new('RGB', (front.width*2, front.height))
+			
+			new_image.paste(front, (0, 0))
+			new_image.paste(back, (front.width, 0))
+			
+			output = io.BytesIO()
+			new_image.save(output, format=front.format)
+			output.seek(0)
+			
+			return output
+			
+		except (AttributeError, KeyError):
+			pass
+		
 		log(f'Downloading image for {c.name()}...')
 		url = c.image_uris(0, 'normal')
-		async with session.get(url) as r:
-			# BytesIO stores the data in memory as a file-like object.
-			# We can turn around and upload it to fedi without ever
-			# touching the disk.
-			image = io.BytesIO(await r.read())
+		image = await download_card_image(session, url)
 
 		log(f'Done downloading image for {c.name()}!')
 		return image
@@ -140,7 +163,7 @@ async def get_cards(card_names):
 		async with aiohttp.ClientSession() as session:
 			images = tuple(zip(
 				await asyncio.gather(
-					*(download_card_image(session, c) for c in cards)
+					*(get_card_image(session, c) for c in cards)
 				),
 				(get_text_representation(c) for c in cards)
 			))
