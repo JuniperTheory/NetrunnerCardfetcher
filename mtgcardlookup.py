@@ -46,12 +46,30 @@ async def startup():
 
 async def get_cards(card_names):
 	async def get_card_image(session, c):
-		async def download_card_image(session, url):
-			async with session.get(url) as r:
+		"""Return card image and description (text representation)"""
+
+		async def download_card_image(session, c):
+			async with session.get(c.image_uris(0, 'normal')) as r:
+				log(f'Downloading image for {c.name()}...')
+
 				# BytesIO stores the data in memory as a file-like object.
 				# We can turn around and upload it to fedi without ever
 				# touching the disk.
-				return io.BytesIO(await r.read())
+				b = await r.read()
+
+				log(f'Done downloading image for {c.name()}!')
+
+				return io.BytesIO(b)
+		
+		async def download_card_text(session, c):
+			async with session.get(c.uri() + '?format=text') as r:
+				log(f'Downloading text representation of {c.name()}...')
+
+				text = await r.text()
+
+				log(f'Done downloading text representation of {c.name()}!')
+
+				return text
 
 		try:
 			front, back = map(Image.open, await asyncio.gather(
@@ -72,54 +90,10 @@ async def get_cards(card_names):
 		except (AttributeError, KeyError):
 			pass
 		
-		log(f'Downloading image for {c.name()}...')
-		url = c.image_uris(0, 'normal')
-		image = await download_card_image(session, url)
-
-		log(f'Done downloading image for {c.name()}!')
-		return image
-
-	def get_text_representation(c):
-		try:
-			# Double face cards have to be treated ENTIRELY DIFFERENTLY
-			# Instead of card objects we just get a list of two dictionaries.
-			# I've decided to try to reuse at much code as possible by jerryrigging
-			# my own Face object that can be passed into my card parsing logic
-			return '\n\n//\n\n'.join((
-				get_text_representation(face.Face(card_face)) for card_face in c.card_faces()
-			))
-		except:
-			pass
-
-		# I genuinely think this is the best way to check whether a card has
-		# power/toughness, considering how Scrython is implemented.
-		# Can't even check for Creature type because of stuff like Vehicles.
-		try:
-			c.power()
-			has_pt = True
-		except KeyError:
-			has_pt = False
-
-		ret = c.name() # All cards have a name.
-
-		# Some cards (lands, [[Wheel of Fate]], whatever) don't have mana costs.
-		# Add it if it's there.
-		if c.mana_cost():
-			ret += f' - {c.mana_cost()}'
-
-		# All cards have a type line.
-		ret += '\n' + c.type_line()
-
-		# Funnily enough, not all cards have oracle text.
-		# It feels like they should, but that's ignoring vanilla creatures.
-		if c.oracle_text():
-			ret += f'\n\n{c.oracle_text()}'
-
-		# Finally, power/toughness.
-		if has_pt:
-			ret += f'\n\n{c.power()}/{c.toughness()}'
-
-		return ret
+		return await asyncio.gather(
+			download_card_image(session, c),
+			download_card_text(session, c)
+		)
 
 	# Responses list: One entry for each [[card name]] in parent, even if the
 	# response is just "No card named 'CARDNAME' was found."
@@ -161,12 +135,9 @@ async def get_cards(card_names):
 	# be treated as special like that.
 	if 1 <= len(cards) <= 4:
 		async with aiohttp.ClientSession() as session:
-			images = tuple(zip(
-				await asyncio.gather(
-					*(get_card_image(session, c) for c in cards)
-				),
-				(get_text_representation(c) for c in cards)
-			))
+			images = await asyncio.gather(
+				*(get_card_image(session, c) for c in cards)
+			)
 	else:
 		images = None
 
