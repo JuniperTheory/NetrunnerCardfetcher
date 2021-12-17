@@ -45,7 +45,7 @@ async def startup():
 			await t
 
 async def get_cards(card_names):
-	async def get_card_image(session, c):
+	async def get_card_image(session, c, get_oracle=True):
 		"""Return card image and description (text representation)"""
 
 		async def download_card_image(session, c):
@@ -70,10 +70,18 @@ async def get_cards(card_names):
 				log(f'Done downloading text representation of {c.name()}!')
 
 				return text
-
+		
 		try:
+			# Scrython exposes this method for every card and just manually raises a KeyError if it's not
+			# a DFC, so this whole section has to be wrapped in a try-catch to deal with it
+			c.card_faces()
+
+			log(f'{c.name()} is a DFC, getting each face separately...')
+
+			oracle_text = download_card_text(session, c)
+
 			front, back = map(Image.open, await asyncio.gather(
-				*(get_card_image(session, face.Face(card_face)) for card_face in c.card_faces())
+				*(get_card_image(session, face.Face(card_face), False) for card_face in c.card_faces())
 			))
 			
 			new_image = Image.new('RGB', (front.width*2, front.height))
@@ -85,15 +93,17 @@ async def get_cards(card_names):
 			new_image.save(output, format=front.format)
 			output.seek(0)
 			
-			return output
-			
-		except (AttributeError, KeyError):
+			return (output, await oracle_text)
+		except KeyError:
 			pass
 		
-		return await asyncio.gather(
-			download_card_image(session, c),
-			download_card_text(session, c)
-		)
+		if get_oracle:
+			return await asyncio.gather(
+				download_card_image(session, c),
+				download_card_text(session, c)
+			)
+		else:
+			return await download_card_image(session, c)
 
 	# Responses list: One entry for each [[card name]] in parent, even if the
 	# response is just "No card named 'CARDNAME' was found."

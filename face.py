@@ -32,3 +32,8 @@ class Face:
 
 	def image_uris(self, _, layout):
 		return self.d['image_uris'][layout]
+	
+	def card_faces(self):
+		# Scrython exposes this method on every card and manually raises KeyError
+		# if it's not a DFC, so unfortunately I have to replicate that here.
+		raise KeyError()
