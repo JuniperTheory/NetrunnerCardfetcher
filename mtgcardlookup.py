@@ -26,6 +26,8 @@ from easter_eggs import eggs
 from debug import *
 
 async def startup():
+	"""Start up the entire bot, logging in and starting to listen for cards"""
+
 	log('Starting up...')
 	if not os.path.exists('config.py'):
 		log('Config file not found, copying', Severity.WARNING)
@@ -46,8 +48,23 @@ async def startup():
 			await t
 
 async def get_cards(card_names):
+	"""
+	Return information about all cards with names in card_names
+
+	params: card_names (iterable with names of cards as strings)
+
+	return: [response, images]
+            where response is a list of strings, each being either:
+			    the card name and scryfall url
+				"No card named {name} was found"
+			and where images is either:
+				a list of up to 4 tuples containing:
+					io.BytesIO images of cards
+					Oracle text for the card it's an image of
+				None
+	"""
+
 	async def get_card_image(session, c, get_oracle=True):
-		"""Return card image and description (text representation)"""
 
 		async def download_card_image(session, c):
 			async with session.get(c.image_uris(0, 'normal')) as r:
@@ -157,6 +174,13 @@ async def get_cards(card_names):
 	return responses, images
 
 async def update_followers(c, me):
+	"""
+	Execute follows/unfollows to ensure that following and follower lists are synced
+
+	params: c (mastodon client object)
+			me (id of this bot's user account)
+	"""
+
 	log('Updating followed accounts...')
 	accounts_following_me = set(map(lambda a: a['id'], await c.get_all(c.account_followers(me))))
 	accounts_i_follow = set(map(lambda a: a['id'], await c.get_all(c.account_following(me))))
@@ -187,6 +211,13 @@ async def update_followers(c, me):
 		log('No accounts to unfollow.')
 
 async def handle_status(c, status):
+	"""
+	Determine if a status should be replied to and, if so, construct and post that reply
+
+	params: c (mastodon client object)
+			status (the status in question)
+	"""
+
 	# Ignore all reblogs
 	if status.get('reblog'): return
 
@@ -246,18 +277,32 @@ async def handle_status(c, status):
 		await c.create_status(status=f'{status_author} {error_msg}', in_reply_to_id=status_id, visibility=reply_visibility)
 
 async def handle_follow(c, follow):
+	"""
+	Follow back any users who follow
+
+	params: c (mastodon client object)
+			follow (the follow notification)
+	"""
+
 	id = follow['account']['id']
 	log(f'Received follow from {id}, following back')
 	await c.account_follow(id)
 
 async def listen(c, me):
+	"""
+	Wait for incoming statuses and notifications and handle them appropriately
+
+	params: c (mastodon client object)
+			me (id of this bot's user account)
+	"""
+
 	log('Listening...')
 	async with c.streaming('user') as stream:
 		async for msg in stream:
 			event = msg.json()['event']
 			payload = json.loads(msg.json()['payload'])
 
-			# We only care about these two events
+			# We only care about 'update' and 'notification' events
 			if event == 'update':
 				mentions_me = any((mentioned['id'] == me['id'] for mentioned in payload['mentions']))
 
