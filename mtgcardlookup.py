@@ -21,6 +21,7 @@ nest_asyncio.apply() # It has something to do with Scrython using asyncio, which
                      # I'm sorry, it's completely beyond me. Look it up.
 
 import face
+from easter_eggs import eggs
 
 from debug import *
 
@@ -121,12 +122,14 @@ async def get_cards(card_names):
 			set_code = ''
 
 		try:
-			if len(name) > 141:
-				c = scrython.cards.Named(fuzzy='Our Market Research Shows That Players Like Really Long Card Names So We Made this Card to Have the Absolute Longest Card Name Ever Elemental')
-			elif len(name) == 0:
-				c = scrython.cards.Named(fuzzy='_____')
+			# Check if any of the easter eggs should happen
+			for func, replacement in eggs:
+				if func(name):
+					c = scrython.cards.Named(fuzzy=replacement)
+					break
 			else:
 				c = scrython.cards.Named(fuzzy=name, set=set_code)
+			
 			cards.append(c)
 			responses.append(f'{c.name()} - {c.scryfall_uri()}')
 		except scrython.foundation.ScryfallError:
