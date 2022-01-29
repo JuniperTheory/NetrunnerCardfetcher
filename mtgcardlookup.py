@@ -6,7 +6,6 @@ import asyncio
 import aiohttp
 import re
 import json
-import requests
 import io
 import traceback
 from PIL import Image
