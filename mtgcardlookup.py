@@ -227,9 +227,9 @@ async def handle_status(c, status):
 	
 	# Reply unlisted or at the same visibility as the parent, whichever is
 	# more restrictive
-	# I realized after writing this that I don't /think/ it ever matters?
-	# I think replies behave the same on public and unlisted. But I'm not 100%
-	# sure so it stays.
+	# This doesn't matter for, say, Mastodon. But apparently some fedi
+	# fedi displays public replies in public timelines? And even if that's
+	# wrong, it doesn't hurt to keep it this way, just in case.
 	reply_visibility = min(('unlisted', status_visibility), key=['direct', 'private', 'unlisted', 'public'].index)
 
 	media_ids = None
