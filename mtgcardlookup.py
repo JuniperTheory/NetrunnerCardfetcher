@@ -7,6 +7,7 @@ import aiohttp
 import re
 import json
 import io
+import argparse
 import traceback
 from PIL import Image
 
@@ -24,8 +25,8 @@ from easter_eggs import eggs
 
 from debug import *
 
-async def startup():
-	"""Start up the entire bot, logging in and starting to listen for cards"""
+async def startup(args):
+	"""Start up the entire bot, logging in and executing code"""
 
 	log('Starting up...')
 	if not os.path.exists('config.py'):
@@ -38,13 +39,64 @@ async def startup():
 		me = await c.verify_account_credentials()
 		log('Credentials verified!')
 
-		tasks = []
+		if args.update_pins:
+			await update_pins(c, me, config)
+		else:
+			tasks = [
+				asyncio.create_task(listen(c, me)),
+				asyncio.create_task(repeat(5 * 60, update_followers, c, me)),
+			]
 
-		tasks.append(asyncio.create_task(listen(c, me)))
-		tasks.append(asyncio.create_task(repeat(5 * 60, update_followers, c, me)))
+			for t in tasks:
+				await t
 
-		for t in tasks:
-			await t
+async def update_pins(c, me, config):
+	"""Resend and repin the thread in pinned_thread.txt"""
+
+	async def get_pinned_statuses(user_id):
+		# atoot can't look up a user's pinned toots for some reason, so we
+		# have to do it ourselves
+		async with aiohttp.ClientSession() as session:
+			url = f'https://{config.instance}/api/v1/accounts/{me["id"]}/statuses?pinned=true'
+			async with session.get(url) as r:
+				return [e['id'] for e in await r.json()]
+	
+	log('Ready to repost the pinned introduction thread!')
+	
+	# Get text for each status of the thread
+	log('Getting thread text...')
+	try:
+		with open('pinned_thread.txt') as f:
+			thread_text = f.read().strip().split('\n-----\n')
+	except:
+		log('Error reading text for new pinned thread!', Severity.ERROR)
+		log('Make sure that the file pinned_thread.txt exists and that it contains the text of each status, separated by lines containing only "-----".', Severity.ERROR)
+		exit(-1)
+
+	thread_statuses = []
+
+	# Post the new thread
+	log('Posting new thread...')
+	for status_text in thread_text:
+		thread_statuses.append(
+			await c.create_status(
+				status=status_text,
+				in_reply_to_id=(thread_statuses[-1]['id'] if thread_statuses else None),
+				visibility='unlisted',
+			)
+		)
+	
+	# Unpin all existing pins
+	log('Unpinning old thread...')
+	for status in (await get_pinned_statuses(me)):
+		await c.status_unpin(status)
+	
+	log('Pinning new thread...')
+	# Pin the new thread in reverse order, so it reads chronologically top to bottom
+	for status in thread_statuses[::-1]:
+		await c.status_pin(status)
+	
+	log('Done!')
 
 async def get_cards(card_names):
 	"""
@@ -247,6 +299,8 @@ async def handle_status(c, status):
 		# ignore any statuses without cards in them
 		if not card_names: return
 
+		log(f'Found a status with cards {card_names}...')
+
 		cards, media = await get_cards(card_names)
 
 		reply_text = status_author
@@ -338,4 +392,12 @@ async def repeat(interval, func, *args, **kwargs):
 		)
 
 if __name__ == '__main__':
-	asyncio.run(startup())
+	parser = argparse.ArgumentParser()
+	parser.add_argument(
+		'--update-pins',
+		help='repost and repin the introduction thread from pinned_thread.txt, then exit',
+		action='store_true'
+	)
+	args = parser.parse_args()
+
+	asyncio.run(startup(args))
