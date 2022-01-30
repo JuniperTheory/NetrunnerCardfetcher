@@ -235,7 +235,14 @@ async def handle_status(c, status):
 	media_ids = None
 
 	try:
-		card_names = re.findall(r'\[\[(.*?)\]\]', status_text)
+		card_names = re.findall(
+			r'''
+				(?:\[\[|\{\{) # A non-capturing group of the characters "[[" or "{{"
+				(.*?)         # The card text being searched for (in a capturing group, so it's returned alone)
+				(?:\]\]|\}\}) # A non-capturing group of the characters "]]" or "}}"
+			''',
+			status_text,
+			re.VERBOSE)
 
 		# ignore any statuses without cards in them
 		if not card_names: return
