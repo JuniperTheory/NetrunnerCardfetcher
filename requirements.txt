@@ -1,0 +1,14 @@
+# For making asynchronous http requests
+aiohttp
+
+# Image processing, for combining the faces of DFCs
+Pillow
+
+# For connecting to a Mastodon instance
+atoot
+
+# For looking up Magic cards
+scrython
+
+# For using asyncio alongside Scrython
+nest-asyncio
