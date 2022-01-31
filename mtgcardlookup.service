@@ -1,0 +1,17 @@
+[Unit]
+Description=MTG Card Lookup Service
+After=multi-user.target
+
+StartLimitIntervalSec=0
+
+[Service]
+Type=idle
+Restart=on-failure
+RestartSec=5s
+ExecStart=/PATH/TO/LOCAL/REPO/mtgcardlookup.py
+WorkingDirectory=/PATH/TO/LOCAL/REPO/mtg-card-lookup/
+User=YOUR_USERNAME
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
