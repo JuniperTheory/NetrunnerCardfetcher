@@ -1,6 +1,8 @@
 # mtg-card-lookup
 
-A fediverse bot to look up Magic: The Gathering cards.
+A fediverse bot to look up Netrunner cards.
+
+In progress of development right now, the current version is a clone of https://git.hollymcfarland.com/monorail/mtg-card-lookup whidch searches magic cards. Once it's setup, it'll do netrunner cards instead (with any luck).
 
 To use, mention the bot with a message that contains at least one Magic card name wrapped in either [[square brackets]] or {{curly braces}}. It will search Scryfall for the card and reply with the result. Alternatively, follow the bot, and it will follow you back. Any posts it sees with that syntax in its home timeline will also be processed.
 
